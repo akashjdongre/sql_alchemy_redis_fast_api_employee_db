@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+sqlalchemy 
+mysql-connector-python==8.0.33
+redis
+email-validator

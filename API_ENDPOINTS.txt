@@ -1,0 +1,272 @@
+========================================================
+         FAST API - EMPLOYEE MANAGEMENT API ENDPOINTS
+========================================================
+Base URL: http://localhost:8088
+
+
+--------------------------------------------------------
+1. LOGIN
+--------------------------------------------------------
+Method  : GET
+URL     : /login
+Response:
+{
+  "msg": "Hello Login"
+}
+
+
+--------------------------------------------------------
+2. GET ALL EMPLOYEES (with pagination)
+--------------------------------------------------------
+Method      : GET
+URL         : /employees
+Query Params: page (default=1), limit (default=3)
+
+Example URL : /employees?page=1&limit=3
+
+Response:
+{
+  "source": "mysql",
+  "data": [
+    {
+      "employee_id": 1,
+      "first_name": "Rahul",
+      "last_name": "Patil",
+      "email": "rahul@company.com",
+      "phone": "9876543212"
+    },
+    {
+      "employee_id": 2,
+      "first_name": "Ritika",
+      "last_name": "Singh",
+      "email": "ritika@company.com",
+      "phone": "9876543219"
+    }
+  ],
+  "count": 2
+}
+
+
+--------------------------------------------------------
+3. GET EMPLOYEE BY ID
+--------------------------------------------------------
+Method  : GET
+URL     : /employee/{employee_id}
+
+Example URL : /employee/1
+
+Response:
+{
+  "source": "db",
+  "data": {
+    "employee_id": 1,
+    "first_name": "Rahul",
+    "last_name": "Patil",
+    "email": "rahul@company.com",
+    "phone": "9876543212",
+    "salary": 55000.0
+  }
+}
+
+Error (not found):
+{
+  "detail": "Employee not found"
+}
+
+
+--------------------------------------------------------
+4. CREATE EMPLOYEE
+--------------------------------------------------------
+Method  : POST
+URL     : /employees
+Body (JSON):
+{
+  "first_name": "Akash",
+  "last_name": "Dongre",
+  "email": "akash@company.com",
+  "phone": "9812345678",
+  "job_title": "Python Developer",
+  "salary": 60000,
+  "manager_id": 1,
+  "status": "Active",
+  "hire_date": "2024-01-15",
+  "department_id": 2
+}
+
+Response:
+{
+  "message": "Employee created successfully",
+  "data": { ...employee object... }
+}
+
+Error (duplicate email):
+{
+  "error": "Email 'akash@company.com' already exists"
+}
+
+
+--------------------------------------------------------
+5. UPDATE EMPLOYEE
+--------------------------------------------------------
+Method  : PUT
+URL     : /employees/{emp_id}
+
+Example URL : /employees/1
+Body (JSON) — send only fields to update:
+{
+  "first_name": "Akash",
+  "last_name": "Dongre",
+  "email": "newemail@company.com",
+  "phone": "9900000000"
+}
+
+Response:
+{
+  "message": "Employee updated successfully",
+  "data": { ...updated employee object... }
+}
+
+
+--------------------------------------------------------
+6. DELETE EMPLOYEE (Soft Delete)
+--------------------------------------------------------
+Method  : DELETE
+URL     : /employees/{emp_id}
+
+Example URL : /employees/1
+
+Response:
+{
+  "message": "Employee Deleted (soft) successfully."
+}
+
+Note: Sets employee status to "Inactive". Does NOT delete from DB.
+
+
+--------------------------------------------------------
+7. SEARCH EMPLOYEES
+--------------------------------------------------------
+Method      : GET
+URL         : /employees/search
+Query Params: name, email, status (all optional)
+
+Example URLs:
+  /employees/search?name=rahul
+  /employees/search?email=company.com
+  /employees/search?status=Active
+  /employees/search?name=rahul&status=Active
+
+Response:
+[
+  {
+    "employee_id": 1,
+    "first_name": "Rahul",
+    "last_name": "Patil",
+    "email": "rahul@company.com",
+    "phone": "9876543212",
+    "status": "Active"
+  }
+]
+
+
+--------------------------------------------------------
+8. ATTENDANCE SUMMARY BY EMPLOYEE
+--------------------------------------------------------
+Method  : GET
+URL     : /attendance/summary/{emp_id}
+
+Example URL : /attendance/summary/1
+
+Response:
+{
+  "source": "db",
+  "data": {
+    "employee_id": 1,
+    "present": 15,
+    "absent": 2,
+    "half_day": 1,
+    "late": 2
+  }
+}
+
+
+--------------------------------------------------------
+9. ATTENDANCE PERCENTAGE BY EMPLOYEE
+--------------------------------------------------------
+Method  : GET
+URL     : /attendance/percentage/{emp_id}
+
+Example URL : /attendance/percentage/1
+
+Response:
+{
+  "source": "db",
+  "data": {
+    "employee_id": 1,
+    "total_work_days": 20,
+    "total_present_days": 15,
+    "attendance_percentage": 75.0
+  }
+}
+
+
+--------------------------------------------------------
+10. MONTHLY NET SALARY (PAYROLL)
+--------------------------------------------------------
+Method  : GET
+URL     : /payroll/monthly/{emp_id}
+
+Example URL : /payroll/monthly/1
+
+Response:
+{
+  "source": "db",
+  "data": {
+    "employee_id": 1,
+    "net_salary": 58000.0
+  }
+}
+
+Formula: net_salary = basic_salary + bonus - deductions
+
+
+--------------------------------------------------------
+11. DEPARTMENT-WISE EMPLOYEES
+--------------------------------------------------------
+Method  : GET
+URL     : /departments/{dept_id}/employees
+
+Example URL : /departments/2/employees
+
+Response:
+{
+  "source": "db",
+  "data": [
+    {
+      "first_name": "Rahul",
+      "last_name": "Patil",
+      "email": "rahul@company.com",
+      "phone": "9876543212",
+      "job_title": "Data Analyst",
+      "department_name": "Analytics"
+    },
+    {
+      "first_name": "Ritika",
+      "last_name": "Singh",
+      "email": "ritika@company.com",
+      "phone": "9876543219",
+      "job_title": "Business Analyst",
+      "department_name": "Analytics"
+    }
+  ]
+}
+
+
+========================================================
+NOTES
+========================================================
+- Redis cache is active on most GET endpoints (TTL: 60s)
+- "source" field tells you if data came from "db" or "redis-cache"
+- Swagger UI available at: http://localhost:8088/docs
+- ReDoc available at      : http://localhost:8088/redoc
+========================================================
