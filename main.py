@@ -22,7 +22,7 @@ app = FastAPI()
 def user_login():
 	
 	data = {
-		"msg":"Hello Login"
+		"msg":"Hello User Login"
 	}
 	return data
 

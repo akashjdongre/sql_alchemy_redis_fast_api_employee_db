@@ -10,6 +10,8 @@ services:
       - .env
     ports:
       - "8088:8088"
+    volumes:
+      - .:/app
     depends_on:
       redis:
         condition: service_started
