@@ -38,7 +38,10 @@ def read_employees(
     cache_key = f"employees:{page}:{limit}"
 
     # STEP 1 → Check Redis Cache
-    cached_data = redis_client.get(cache_key)
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
     if cached_data:
         return {
@@ -46,12 +49,12 @@ def read_employees(
             "data": json.loads(cached_data),
             "count": len(cached_data)
         }
-    
+
     # STEP 2 → Fetch From MySQL
     offset = (page - 1) * limit
 
     employees = db.query(Employee).offset(offset).limit(limit).all()
-    
+
     # STEP 3 → Store In Redis Cache
 
     employee_list = []
@@ -63,12 +66,11 @@ def read_employees(
             "email": emp.email,
             "phone": emp.phone
         })
-    
-    redis_client.set(
-        cache_key, 
-        json.dumps(employee_list), 
-        ex=60 # Cache expires in 60 seconds
-    ) 
+
+    try:
+        redis_client.set(cache_key, json.dumps(employee_list), ex=60)
+    except Exception:
+        pass
 
     return {
         "source": "mysql",
@@ -87,14 +89,17 @@ def read_employee(
     cache_key = f"employee:{employee_id}"
 
     # STEP 1 → Check For Redis Cache
-    cached_data = redis_client.get(cache_key)
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
     if cached_data:
         return {
 		    "source": "redis-cache",
 		    "data": json.loads(cached_data)
 		}
-    
+
     # STEP 2 → Fetch From MySQL
     employee = (
         db.query(Employee)
@@ -114,11 +119,10 @@ def read_employee(
     }
 
     # STEP 3 → Store In Redis Cache
-    redis_client.set(
-        cache_key,
-        json.dumps(employee_data),
-        ex=60 # Cache expires in 60 seconds
-    )
+    try:
+        redis_client.set(cache_key, json.dumps(employee_data), ex=60)
+    except Exception:
+        pass
 
     return {
 		    "source": "db",
@@ -229,7 +233,10 @@ def attendance_summary_employee(
 	
 	cache_key = f"attSumEmployee:{emp_id}"
 
-	cached_data = redis_client.get(cache_key)
+	try:
+		cached_data = redis_client.get(cache_key)
+	except Exception:
+		cached_data = None
 
 	if cached_data:
 		return {
@@ -260,11 +267,10 @@ def attendance_summary_employee(
 	}
 
 	# STEP 3 → Store In Redis Cache
-	redis_client.set(
-	  cache_key,
-	  json.dumps(attendace_data),
-	  ex=60 # Cache expires in 60 seconds
-	 )
+	try:
+		redis_client.set(cache_key, json.dumps(attendace_data), ex=60)
+	except Exception:
+		pass
 
 	return {
 	 "source": "db",
@@ -280,7 +286,10 @@ def getEmployeeNetSalary(
 	):
 	
 	cache_key = f"empNetSalary:{emp_id}"
-	cached_data = redis_client.get(cache_key)
+	try:
+		cached_data = redis_client.get(cache_key)
+	except Exception:
+		cached_data = None
 	if cached_data:
 		return {
 			"source":"redis-cache",
@@ -298,11 +307,10 @@ def getEmployeeNetSalary(
 		"net_salary": net_salary
 	}
 
-	redis_client.set(
-		cache_key,
-		json.dumps(payroll_data),
-        ex=60
-	)
+	try:
+		redis_client.set(cache_key, json.dumps(payroll_data), ex=60)
+	except Exception:
+		pass
 
 	return {
 	    "source": "db",
@@ -346,9 +354,12 @@ def search_employees(
 def getDepartmentEmployees(emp_id: int,db: Session = Depends(get_db)):
 
 	cache_key = f"deptEmployee:{emp_id}"
-	
-	cached_data = redis_client.get(cache_key)
-	
+
+	try:
+		cached_data = redis_client.get(cache_key)
+	except Exception:
+		cached_data = None
+
 	if cached_data:
 		return {
 			"source":"redis-cache",
@@ -388,11 +399,10 @@ def getDepartmentEmployees(emp_id: int,db: Session = Depends(get_db)):
 	] if len(result) > 0 else { "No Data Found." }
 
 
-	redis_client.set(
-		cache_key,
-		json.dumps(empSearchData),
-        ex=60
-	)
+	try:
+		redis_client.set(cache_key, json.dumps(empSearchData), ex=60)
+	except Exception:
+		pass
 
 	return {
 		    "source": "db",
@@ -409,7 +419,10 @@ def empAttendPerc(emp_id: int, db: Session = Depends(get_db)):
 
 	cache_key = f"attendEmpPerc:{emp_id}"
 
-	cached_data = redis_client.get(cache_key)
+	try:
+		cached_data = redis_client.get(cache_key)
+	except Exception:
+		cached_data = None
 	if cached_data:
 		return {
 			"source":"redis-cache",
@@ -430,11 +443,10 @@ def empAttendPerc(emp_id: int, db: Session = Depends(get_db)):
 		"attendance_percentage": round(attend_perc,2)
 	}
 
-	redis_client.set(
-		cache_key,
-		json.dumps(attend_data),
-        ex=60
-	)
+	try:
+		redis_client.set(cache_key, json.dumps(attend_data), ex=60)
+	except Exception:
+		pass
 
 	return {
 	    "source": "db",
