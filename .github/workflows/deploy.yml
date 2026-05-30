@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -13,11 +16,11 @@ jobs:
 
       # 1. Download your code
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       # 2. Connect GitHub Actions to AWS using your IAM keys
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v4.1.0
         with:
           aws-access-key-id    : ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -34,7 +37,7 @@ jobs:
         env:
           ECR_REGISTRY  : ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-          IMAGE_TAG     : ${{ github.sha }}        # unique tag per commit
+          IMAGE_TAG     : ${{ github.sha }}
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
@@ -63,4 +66,4 @@ jobs:
           task-definition      : ${{ steps.task-def.outputs.task-definition }}
           service              : ${{ secrets.ECS_SERVICE }}
           cluster              : ${{ secrets.ECS_CLUSTER }}
-          wait-for-service-stability: true    # waits until new container is healthy
+          wait-for-service-stability: true
