@@ -20,52 +20,47 @@ app = FastAPI()
 
 @app.get("/login")
 def user_login():
-	
-	data = {
-		"msg":"Hello User Login"
-	}
-	return data
+    data = {
+        "msg": "Hello User Login"
+    }
+    return data
 
 #---------------- Get all employees with pagination -----------------#
 
-@app.get("/employees", response_model=EmployeesWrapper) #-- The returned response MUST match EmployeesWrapper schema
+@app.get("/employees", response_model=EmployeesWrapper)
 def read_employees(
-	    page: int = 1,
-	    limit: int = 3,
-	    db: Session = Depends(get_db)
-	):
-
+    page: int = 1,
+    limit: int = 3,
+    db: Session = Depends(get_db)
+):
     cache_key = f"employees:{page}:{limit}"
 
-    # STEP 1 → Check Redis Cache
     try:
         cached_data = redis_client.get(cache_key)
     except Exception:
         cached_data = None
 
     if cached_data:
+        cached_list = json.loads(cached_data)
         return {
             "source": "redis-cache",
-            "data": json.loads(cached_data),
-            "count": len(cached_data)
+            "data": cached_list,
+            "count": len(cached_list)
         }
 
-    # STEP 2 → Fetch From MySQL
     offset = (page - 1) * limit
-
     employees = db.query(Employee).offset(offset).limit(limit).all()
 
-    # STEP 3 → Store In Redis Cache
-
-    employee_list = []
-    for emp in employees:
-        employee_list.append({
+    employee_list = [
+        {
             "employee_id": emp.employee_id,
             "first_name": emp.first_name,
             "last_name": emp.last_name,
             "email": emp.email,
-            "phone": emp.phone
-        })
+            "phone": emp.phone,
+        }
+        for emp in employees
+    ]
 
     try:
         redis_client.set(cache_key, json.dumps(employee_list), ex=60)
@@ -84,11 +79,9 @@ def read_employees(
 def read_employee(
     employee_id: int,
     db: Session = Depends(get_db)
-	):
-
+):
     cache_key = f"employee:{employee_id}"
 
-    # STEP 1 → Check For Redis Cache
     try:
         cached_data = redis_client.get(cache_key)
     except Exception:
@@ -96,11 +89,10 @@ def read_employee(
 
     if cached_data:
         return {
-		    "source": "redis-cache",
-		    "data": json.loads(cached_data)
-		}
+            "source": "redis-cache",
+            "data": json.loads(cached_data)
+        }
 
-    # STEP 2 → Fetch From MySQL
     employee = (
         db.query(Employee)
         .filter(Employee.employee_id == employee_id)
@@ -118,205 +110,192 @@ def read_employee(
         "salary": float(employee.salary),
     }
 
-    # STEP 3 → Store In Redis Cache
     try:
         redis_client.set(cache_key, json.dumps(employee_data), ex=60)
     except Exception:
         pass
 
     return {
-		    "source": "db",
-		    "data": employee_data
-	}
+        "source": "db",
+        "data": employee_data
+    }
 
 #------------------------ CREATE EMPLOYEE ------------------------------#
 
 @app.post("/employees")
 def create_employee(
-		employee: EmployeeCreate,
-		db: Session = Depends(get_db)
-	):
-	
-	#----------------- CHECK IF Employee with Email is exist --------------------#
+    employee: EmployeeCreate,
+    db: Session = Depends(get_db)
+):
+    existing_employee = (
+        db.query(Employee)
+        .filter(Employee.email == employee.email)
+        .first()
+    )
 
-	existing_employee = (
-	    db.query(Employee)
-	    .filter(Employee.email == employee.email)
-	    .first()
-	)
+    if existing_employee:
+        return {
+            "error": f"Email '{employee.email}' already exists"
+        }
 
-	if existing_employee:
-		return {
-		"error": f"Email '{employee.email}' already exists"
-	}
+    new_employee = Employee(
+        first_name=employee.first_name,
+        last_name=employee.last_name,
+        email=employee.email,
+        phone=employee.phone,
+        job_title=employee.job_title,
+        salary=employee.salary,
+        manager_id=employee.manager_id,
+        status=employee.status,
+        hire_date=employee.hire_date,
+        department_id=employee.department_id
+    )
+    db.add(new_employee)
+    db.commit()
+    db.refresh(new_employee)
 
-	new_employee = Employee(
-			first_name=employee.first_name,
-	        last_name=employee.last_name,
-	        email=employee.email,
-	        phone=employee.phone,
-	        job_title=employee.job_title,
-	        salary=employee.salary,
-	        manager_id=employee.manager_id,
-	        status=employee.status,
-	        hire_date=employee.hire_date,
-	        department_id=employee.department_id
-		)
-	db.add(new_employee)
-	db.commit()
-	db.refresh(new_employee)
-
-	return {
-		"message": "Employee created successfully",
-		"data": new_employee
-	}
+    return {
+        "message": "Employee created successfully",
+        "data": new_employee
+    }
 
 #------------------------ UPDATE EMPLOYEE ------------------------------#
 
 @app.put("/employees/{emp_id}")
 def update_employee(
-		emp_id : int,
-		emp_update : EmployeeUpdate,
-		db: Session = Depends(get_db)
-	):
-	
-	#----------------- CHECK IF Employee with Email is exist --------------------#
+    emp_id: int,
+    emp_update: EmployeeUpdate,
+    db: Session = Depends(get_db)
+):
+    existing_employee = get_employee_or_404(emp_id, db)
 
-	existing_employee = get_employee_or_404(emp_id, db)
+    if emp_update.first_name is not None:
+        existing_employee.first_name = emp_update.first_name
 
-	if emp_update.first_name is not None:
-		existing_employee.first_name = emp_update.first_name
+    if emp_update.last_name is not None:
+        existing_employee.last_name = emp_update.last_name
 
-	if emp_update.last_name is not None:
-		existing_employee.last_name = emp_update.last_name
+    if emp_update.email is not None:
+        existing_employee.email = emp_update.email
 
-	if emp_update.email is not None:
-		existing_employee.email = emp_update.email
+    if emp_update.phone is not None:
+        existing_employee.phone = emp_update.phone
 
-	if emp_update.phone is not None:
-		existing_employee.phone = emp_update.phone
-		
-	db.commit()
-	db.refresh(existing_employee)
+    db.commit()
+    db.refresh(existing_employee)
 
-	return {
-		"message": "Employee updated successfully",
-		"data": existing_employee
-	}
-
+    return {
+        "message": "Employee updated successfully",
+        "data": existing_employee
+    }
 
 #-------------------- DELETE (Soft Delete Employee) --------------------#
 
 @app.delete("/employees/{emp_id}")
 def delete_employee(
-	emp_id : int,
-	db: Session = Depends(get_db)
-	):
-	
-	existing_employee = get_employee_or_404(emp_id, db)
-	
-	existing_employee.status = 'Inactive'
-	db.commit()
-	db.refresh(existing_employee)
+    emp_id: int,
+    db: Session = Depends(get_db)
+):
+    existing_employee = get_employee_or_404(emp_id, db)
 
-	return {
-		"message": "Employee Deleted (soft) successfully."
-	}
+    existing_employee.status = 'Inactive'
+    db.commit()
+    db.refresh(existing_employee)
+
+    return {
+        "message": "Employee Deleted (soft) successfully."
+    }
 
 #------------- Employee Attendance Summary ----------------#
 
 @app.get("/attendance/summary/{emp_id}", response_model=AttendSummaryWrapper)
 def attendance_summary_employee(
-		emp_id : int,
-		db: Session = Depends(get_db)
-	):
-	
-	cache_key = f"attSumEmployee:{emp_id}"
+    emp_id: int,
+    db: Session = Depends(get_db)
+):
+    cache_key = f"attSumEmployee:{emp_id}"
 
-	try:
-		cached_data = redis_client.get(cache_key)
-	except Exception:
-		cached_data = None
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
-	if cached_data:
-		return {
-			"source":"redis-cache",
-			"data":json.loads(cached_data)
-		}
+    if cached_data:
+        return {
+            "source": "redis-cache",
+            "data": json.loads(cached_data)
+        }
 
-	employee = get_employee_or_404(emp_id, db)
+    employee = get_employee_or_404(emp_id, db)
 
-	# STEP 2 → Fetch From MySQL
+    rows = db.query(
+        Attendance.status,
+        func.count().label("attend_count")
+    ).filter(
+        Attendance.employee_id == emp_id
+    ).group_by(
+        Attendance.status
+    ).all()
 
-	rows = db.query(
-	    Attendance.status,
-	    func.count().label("attend_count")
-	).filter(
-	    Attendance.employee_id == emp_id
-	).group_by(
-	    Attendance.status
-	).all()
+    counts = {r.status.lower().replace(" ", "_"): r.attend_count for r in rows}
+    attendace_data = {
+        "employee_id": emp_id,
+        "present":  counts.get("present", 0),
+        "absent":   counts.get("absent", 0),
+        "half_day": counts.get("half_day", 0),
+        "late":     counts.get("late", 0),
+    }
 
-	counts = {r.status.lower().replace(" ", "_"): r.attend_count for r in rows}
-	attendace_data = {
-	    "employee_id": emp_id,
-	    "present":  counts.get("present", 0),
-	    "absent":   counts.get("absent", 0),
-	    "half_day": counts.get("half_day", 0),
-	    "late":     counts.get("late", 0),
-	}
+    try:
+        redis_client.set(cache_key, json.dumps(attendace_data), ex=60)
+    except Exception:
+        pass
 
-	# STEP 3 → Store In Redis Cache
-	try:
-		redis_client.set(cache_key, json.dumps(attendace_data), ex=60)
-	except Exception:
-		pass
-
-	return {
-	 "source": "db",
-	 "data": attendace_data
-	}
+    return {
+        "source": "db",
+        "data": attendace_data
+    }
 
 #-------------- Monthly Salary API ------------------#
 
 @app.get("/payroll/monthly/{emp_id}", response_model=PayrollWrapper)
 def getEmployeeNetSalary(
-	emp_id: int,
+    emp_id: int,
     db: Session = Depends(get_db)
-	):
-	
-	cache_key = f"empNetSalary:{emp_id}"
-	try:
-		cached_data = redis_client.get(cache_key)
-	except Exception:
-		cached_data = None
-	if cached_data:
-		return {
-			"source":"redis-cache",
-			"data":json.loads(cached_data)
-		}
+):
+    cache_key = f"empNetSalary:{emp_id}"
 
-	employee = get_employee_or_404(emp_id, db)
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
-	payroll_data = db.query(Payroll).filter(Payroll.employee_id == emp_id).all()
+    if cached_data:
+        return {
+            "source": "redis-cache",
+            "data": json.loads(cached_data)
+        }
 
-	net_salary = (payroll_data[0].basic_salary + payroll_data[0].bonus) - payroll_data[0].deductions
+    employee = get_employee_or_404(emp_id, db)
 
-	payroll_data = {
-		"employee_id": emp_id,
-		"net_salary": net_salary
-	}
+    payroll_data = db.query(Payroll).filter(Payroll.employee_id == emp_id).all()
 
-	try:
-		redis_client.set(cache_key, json.dumps(payroll_data), ex=60)
-	except Exception:
-		pass
+    net_salary = (payroll_data[0].basic_salary + payroll_data[0].bonus) - payroll_data[0].deductions
 
-	return {
-	    "source": "db",
-	    "data": payroll_data
-	}
+    payroll_result = {
+        "employee_id": emp_id,
+        "net_salary": net_salary
+    }
 
+    try:
+        redis_client.set(cache_key, json.dumps(payroll_result), ex=60)
+    except Exception:
+        pass
+
+    return {
+        "source": "db",
+        "data": payroll_result
+    }
 
 #----------------- Search Employee ---------------------#
 
@@ -326,8 +305,7 @@ def search_employees(
     email: Optional[str] = None,
     status: Optional[str] = None,
     db: Session = Depends(get_db)
-	):	
-
+):
     query = db.query(Employee)
 
     filters = []
@@ -344,120 +322,111 @@ def search_employees(
     if filters:
         query = query.filter(or_(*filters))
 
-    search_result = query.all()
-
-    return search_result
+    return query.all()
 
 #--------------------- Department-wise Employees ----------------------#
 
-@app.get("/departments/{emp_id}/employees", response_model=DeptEmployeeWrapper)
-def getDepartmentEmployees(emp_id: int,db: Session = Depends(get_db)):
+@app.get("/departments/{dept_id}/employees", response_model=DeptEmployeeWrapper)
+def getDepartmentEmployees(dept_id: int, db: Session = Depends(get_db)):
+    cache_key = f"deptEmployee:{dept_id}"
 
-	cache_key = f"deptEmployee:{emp_id}"
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
-	try:
-		cached_data = redis_client.get(cache_key)
-	except Exception:
-		cached_data = None
+    if cached_data:
+        return {
+            "source": "redis-cache",
+            "data": json.loads(cached_data)
+        }
 
-	if cached_data:
-		return {
-			"source":"redis-cache",
-			"data":json.loads(cached_data)
-		}
-	
-	result = (
-		db.query(
-		Employee.first_name,
-        Employee.last_name,
-        Employee.email,
-        Employee.phone,
-        Employee.job_title,
-        Departments.department_name
-		)
-		.join(
-			Departments,
-			Employee.department_id == Departments.department_id
-		)
-		.filter(
-			Employee.department_id == emp_id
-		)
-		.all()
-	)
+    result = (
+        db.query(
+            Employee.first_name,
+            Employee.last_name,
+            Employee.email,
+            Employee.phone,
+            Employee.job_title,
+            Departments.department_name
+        )
+        .join(Departments, Employee.department_id == Departments.department_id)
+        .filter(Employee.department_id == dept_id)
+        .all()
+    )
 
+    emp_list = [
+        {
+            "first_name": r.first_name,
+            "last_name": r.last_name,
+            "email": r.email,
+            "phone": r.phone,
+            "job_title": r.job_title,
+            "department_name": r.department_name,
+        }
+        for r in result
+    ]
 
-	empSearchData = [
-		{
-			"first_name": r.first_name,
-			"last_name": r.last_name,
-			"email": r.email,
-			"phone": r.phone,
-			"job_title": r.job_title,
-			"department_name": r.department_name,
-		}
-		for r in result 
-	] if len(result) > 0 else { "No Data Found." }
+    try:
+        redis_client.set(cache_key, json.dumps(emp_list), ex=60)
+    except Exception:
+        pass
 
-
-	try:
-		redis_client.set(cache_key, json.dumps(empSearchData), ex=60)
-	except Exception:
-		pass
-
-	return {
-		    "source": "db",
-		    "data": empSearchData
-		}
-
+    return {
+        "source": "db",
+        "data": emp_list
+    }
 
 #------------------- Attendance Percentage API ---------------------#
 
 @app.get("/attendance/percentage/{emp_id}")
 def empAttendPerc(emp_id: int, db: Session = Depends(get_db)):
+    employee = get_employee_or_404(emp_id, db)
 
-	employee = get_employee_or_404(emp_id, db)
+    cache_key = f"attendEmpPerc:{emp_id}"
 
-	cache_key = f"attendEmpPerc:{emp_id}"
+    try:
+        cached_data = redis_client.get(cache_key)
+    except Exception:
+        cached_data = None
 
-	try:
-		cached_data = redis_client.get(cache_key)
-	except Exception:
-		cached_data = None
-	if cached_data:
-		return {
-			"source":"redis-cache",
-			"data":json.loads(cached_data)
-		}
+    if cached_data:
+        return {
+            "source": "redis-cache",
+            "data": json.loads(cached_data)
+        }
 
-	attendData = db.query(Attendance.employee_id,Attendance.status,Attendance.attendance_date).filter(Attendance.employee_id == emp_id ).all()
+    attendData = db.query(
+        Attendance.employee_id,
+        Attendance.status,
+        Attendance.attendance_date
+    ).filter(Attendance.employee_id == emp_id).all()
 
-	total_work_days = [ data[2] for data in attendData]
-	present_days = [ data[1] for data in attendData if data[1]=="Present"]
+    total_work_days = [data[2] for data in attendData]
+    present_days = [data[1] for data in attendData if data[1] == "Present"]
 
-	attend_perc = ( (len(present_days) / len(total_work_days)) * 100 )
+    attend_perc = (len(present_days) / len(total_work_days)) * 100
 
-	attend_data = {
-		"employee_id": emp_id,
-		"total_work_days": len(total_work_days),
-		"total_present_days": len(present_days),
-		"attendance_percentage": round(attend_perc,2)
-	}
+    attend_data = {
+        "employee_id": emp_id,
+        "total_work_days": len(total_work_days),
+        "total_present_days": len(present_days),
+        "attendance_percentage": round(attend_perc, 2)
+    }
 
-	try:
-		redis_client.set(cache_key, json.dumps(attend_data), ex=60)
-	except Exception:
-		pass
+    try:
+        redis_client.set(cache_key, json.dumps(attend_data), ex=60)
+    except Exception:
+        pass
 
-	return {
-	    "source": "db",
-	    "data": attend_data
-	}
-
+    return {
+        "source": "db",
+        "data": attend_data
+    }
 
 #-------------- Validate Employee with emp_id If exist -------------#
 
 def get_employee_or_404(emp_id: int, db: Session):
-
     employee = (
         db.query(Employee)
         .filter(Employee.employee_id == emp_id)
@@ -468,5 +437,4 @@ def get_employee_or_404(emp_id: int, db: Session):
             status_code=404,
             detail="Employee not found"
         )
-
     return employee
