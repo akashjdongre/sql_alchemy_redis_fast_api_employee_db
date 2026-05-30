@@ -43,12 +43,14 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
-      # 5. Download current task definition from ECS
+      # 5. Download current task definition from ECS and strip unsupported fields
       - name: Download Task Definition
         run: |
           aws ecs describe-task-definition \
             --task-definition fast-api-emp-task \
-            --query taskDefinition > task-definition.json
+            --query taskDefinition \
+          | jq 'del(.enableFaultInjection, .taskDefinitionArn, .revision, .status, .requiresAttributes, .placementConstraints, .compatibilities, .registeredAt, .registeredBy)' \
+          > task-definition.json
 
       # 6. Update task definition with the new image
       - name: Update ECS Task Definition with New Image
@@ -61,7 +63,7 @@ jobs:
 
       # 7. Deploy updated task definition to ECS Service
       - name: Deploy to ECS Service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition      : ${{ steps.task-def.outputs.task-definition }}
           service              : ${{ secrets.ECS_SERVICE }}
